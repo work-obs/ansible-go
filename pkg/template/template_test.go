@@ -115,7 +115,7 @@ func TestEngine_Render_DefaultFilter(t *testing.T) {
 		},
 	}
 
-	template := "{{ undefined_var | default('default_value') }} and {{ defined_var | default('other') }}"
+	template := "{{ undefined_var | default \"default_value\" }} and {{ defined_var | default \"other\" }}"
 	result, err := engine.Render(template, ctx)
 
 	if err != nil {

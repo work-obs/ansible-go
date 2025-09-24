@@ -32,10 +32,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/ansible/ansible-go/internal/server"
-	"github.com/ansible/ansible-go/pkg/config"
-	"github.com/ansible/ansible-go/pkg/executor"
-	inventoryPkg "github.com/ansible/ansible-go/pkg/inventory"
+	"github.com/work-obs/ansible-go/internal/server"
+	"github.com/work-obs/ansible-go/pkg/config"
+	"github.com/work-obs/ansible-go/pkg/executor"
+	inventoryPkg "github.com/work-obs/ansible-go/pkg/inventory"
 )
 
 const (
@@ -274,9 +274,12 @@ func runAdHoc(hostPattern, moduleName string, config *config.Config) error {
 		inventoryPath = config.InventoryFile
 	}
 
-	invManager, err := inventoryPkg.NewManager(inventoryPath, config)
-	if err != nil {
-		return fmt.Errorf("failed to create inventory manager: %w", err)
+	fs := afero.NewOsFs()
+	invManager := inventoryPkg.NewManager(fs)
+
+	// Load inventory from file
+	if err := invManager.LoadFromFile(inventoryPath); err != nil {
+		return fmt.Errorf("failed to load inventory: %w", err)
 	}
 
 	// Load inventory
@@ -290,7 +293,11 @@ func runAdHoc(hostPattern, moduleName string, config *config.Config) error {
 		return nil
 	}
 
-	fmt.Printf("Found %d host(s): %s\n", len(hosts), strings.Join(hosts, ", "))
+	hostNames := make([]string, len(hosts))
+	for i, host := range hosts {
+		hostNames[i] = host.Name
+	}
+	fmt.Printf("Found %d host(s): %s\n", len(hosts), strings.Join(hostNames, ", "))
 
 	// Create task executor
 	execConfig := &executor.Config{
@@ -323,7 +330,7 @@ func runAdHoc(hostPattern, moduleName string, config *config.Config) error {
 	}
 
 	// Execute the module
-	results, err := taskExecutor.ExecuteModule(context.Background(), hosts, moduleName, moduleArguments)
+	results, err := taskExecutor.ExecuteModule(context.Background(), hostNames, moduleName, moduleArguments)
 	if err != nil {
 		return fmt.Errorf("failed to execute module: %w", err)
 	}
@@ -337,8 +344,8 @@ func runAdHoc(hostPattern, moduleName string, config *config.Config) error {
 		if result.Failed {
 			fmt.Printf("FAILED: [%s] => %s\n", host, result.Message)
 		}
-		if verbose > 0 && len(result.Data) > 0 {
-			fmt.Printf("Output: %v\n", result.Data)
+		if verbose > 0 && len(result.Result) > 0 {
+			fmt.Printf("Output: %v\n", result.Result)
 		}
 	}
 

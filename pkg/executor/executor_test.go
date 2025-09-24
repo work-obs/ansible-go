@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ansible/ansible-go/pkg/config"
-	"github.com/ansible/ansible-go/pkg/plugins"
-	"github.com/ansible/ansible-go/internal/router"
+	"github.com/work-obs/ansible-go/pkg/config"
+	"github.com/work-obs/ansible-go/pkg/plugins"
+	"github.com/work-obs/ansible-go/internal/router"
 	"github.com/spf13/afero"
 )
 
@@ -77,27 +77,27 @@ func (m *MockPlugin) Validate(args map[string]interface{}) error {
 
 // MockPluginManager implements the Manager interface for testing
 type MockPluginManager struct {
-	plugins map[string]plugins.Plugin
+	plugins map[string]plugins.ExecutablePlugin
 }
 
 func NewMockPluginManager() *MockPluginManager {
 	return &MockPluginManager{
-		plugins: make(map[string]plugins.Plugin),
+		plugins: make(map[string]plugins.ExecutablePlugin),
 	}
 }
 
-func (m *MockPluginManager) AddPlugin(name string, plugin plugins.Plugin) {
+func (m *MockPluginManager) AddPlugin(name string, plugin plugins.ExecutablePlugin) {
 	m.plugins[name] = plugin
 }
 
-func (m *MockPluginManager) LoadModule(name string) (plugins.Plugin, error) {
+func (m *MockPluginManager) LoadModule(name string) (plugins.ExecutablePlugin, error) {
 	if plugin, exists := m.plugins[name]; exists {
 		return plugin, nil
 	}
 	return nil, &plugins.PluginError{Message: "Plugin not found: " + name}
 }
 
-func (m *MockPluginManager) LoadPlugin(pluginType plugins.PluginType, name string) (plugins.Plugin, error) {
+func (m *MockPluginManager) LoadPlugin(pluginType plugins.PluginType, name string) (plugins.ExecutablePlugin, error) {
 	return m.LoadModule(name)
 }
 

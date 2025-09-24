@@ -22,9 +22,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ansible/ansible-go/pkg/config"
-	"github.com/ansible/ansible-go/pkg/plugins"
-	"github.com/ansible/ansible-go/internal/router"
+	"github.com/work-obs/ansible-go/internal/router"
+	"github.com/work-obs/ansible-go/pkg/config"
+	"github.com/work-obs/ansible-go/pkg/plugins"
 )
 
 // TaskStatus represents the status of a task execution
@@ -55,56 +55,56 @@ type TaskResult struct {
 
 // Task represents a single task to be executed
 type Task struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Module      string                 `json:"module"`
-	Args        map[string]interface{} `json:"args,omitempty"`
-	Host        string                 `json:"host"`
-	Vars        map[string]interface{} `json:"vars,omitempty"`
-	When        string                 `json:"when,omitempty"`
-	Loop        interface{}            `json:"loop,omitempty"`
-	Delegate    string                 `json:"delegate_to,omitempty"`
-	RunOnce     bool                   `json:"run_once,omitempty"`
-	Async       int                    `json:"async,omitempty"`
-	Poll        int                    `json:"poll,omitempty"`
-	Timeout     time.Duration          `json:"timeout,omitempty"`
-	Retries     int                    `json:"retries,omitempty"`
-	Delay       time.Duration          `json:"delay,omitempty"`
-	IgnoreErrors bool                  `json:"ignore_errors,omitempty"`
-	ChangedWhen string                 `json:"changed_when,omitempty"`
-	FailedWhen  string                 `json:"failed_when,omitempty"`
-	Tags        []string               `json:"tags,omitempty"`
+	ID           string                 `json:"id"`
+	Name         string                 `json:"name"`
+	Module       string                 `json:"module"`
+	Args         map[string]interface{} `json:"args,omitempty"`
+	Host         string                 `json:"host"`
+	Vars         map[string]interface{} `json:"vars,omitempty"`
+	When         string                 `json:"when,omitempty"`
+	Loop         interface{}            `json:"loop,omitempty"`
+	Delegate     string                 `json:"delegate_to,omitempty"`
+	RunOnce      bool                   `json:"run_once,omitempty"`
+	Async        int                    `json:"async,omitempty"`
+	Poll         int                    `json:"poll,omitempty"`
+	Timeout      time.Duration          `json:"timeout,omitempty"`
+	Retries      int                    `json:"retries,omitempty"`
+	Delay        time.Duration          `json:"delay,omitempty"`
+	IgnoreErrors bool                   `json:"ignore_errors,omitempty"`
+	ChangedWhen  string                 `json:"changed_when,omitempty"`
+	FailedWhen   string                 `json:"failed_when,omitempty"`
+	Tags         []string               `json:"tags,omitempty"`
 }
 
 // ExecutionContext holds the context for task execution
 type ExecutionContext struct {
-	Config        *config.Config
-	Variables     map[string]interface{}
-	Facts         map[string]interface{}
-	HostVars      map[string]map[string]interface{}
-	GroupVars     map[string]map[string]interface{}
-	ExtraVars     map[string]interface{}
-	Inventory     map[string]interface{}
+	Config         *config.Config
+	Variables      map[string]interface{}
+	Facts          map[string]interface{}
+	HostVars       map[string]map[string]interface{}
+	GroupVars      map[string]map[string]interface{}
+	ExtraVars      map[string]interface{}
+	Inventory      map[string]interface{}
 	ConnectionInfo map[string]interface{}
 }
 
 // Executor manages task execution
 type Executor struct {
-	config      *config.Config
-	router      *router.Router
-	pluginMgr   *plugins.Manager
-	results     map[string]*TaskResult
-	mutex       sync.RWMutex
-	maxWorkers  int
-	taskQueue   chan *Task
-	resultChan  chan *TaskResult
-	workerPool  chan chan *Task
-	ctx         context.Context
-	cancel      context.CancelFunc
+	config     *config.Config
+	router     *router.Router
+	pluginMgr  plugins.Manager
+	results    map[string]*TaskResult
+	mutex      sync.RWMutex
+	maxWorkers int
+	taskQueue  chan *Task
+	resultChan chan *TaskResult
+	workerPool chan chan *Task
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 // NewExecutor creates a new task executor
-func NewExecutor(cfg *config.Config, router *router.Router, pluginMgr *plugins.Manager) *Executor {
+func NewExecutor(cfg *config.Config, router *router.Router, pluginMgr plugins.Manager) *Executor {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Executor{
@@ -311,7 +311,7 @@ func (e *Executor) failTask(result *TaskResult, errorMsg string) (*TaskResult, e
 	result.Error = errorMsg
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(result.StartTime)
-	return result, fmt.Errorf(errorMsg)
+	return result, fmt.Errorf("%s", errorMsg)
 }
 
 // dispatch dispatches tasks to workers
@@ -346,7 +346,7 @@ func (e *Executor) collectResults() {
 }
 
 // executeModule executes a module plugin
-func (e *Executor) executeModule(plugin plugins.Plugin, task *Task, execCtx *ExecutionContext) (map[string]interface{}, error) {
+func (e *Executor) executeModule(plugin plugins.ExecutablePlugin, task *Task, execCtx *ExecutionContext) (map[string]interface{}, error) {
 	// Create module context
 	moduleCtx := &plugins.ModuleContext{
 		Args:      task.Args,

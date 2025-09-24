@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ansible/ansible-go/internal/auth"
-	"github.com/ansible/ansible-go/pkg/api"
-	"github.com/ansible/ansible-go/pkg/config"
+	"github.com/work-obs/ansible-go/internal/auth"
+	"github.com/work-obs/ansible-go/pkg/api"
+	"github.com/work-obs/ansible-go/pkg/config"
 )
 
 // Server represents the Ansible Go HTTPS server

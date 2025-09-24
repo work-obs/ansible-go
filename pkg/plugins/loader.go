@@ -24,7 +24,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ansible/ansible-go/pkg/config"
+	"github.com/work-obs/ansible-go/pkg/config"
 	"github.com/spf13/afero"
 )
 

@@ -48,11 +48,11 @@ type Group struct {
 
 // Inventory manages the complete inventory of hosts and groups
 type Inventory struct {
-	Hosts       map[string]*Host  `json:"hosts" yaml:"hosts"`
-	Groups      map[string]*Group `json:"groups" yaml:"groups"`
-	fs          afero.Fs
-	AllGroup    *Group            `json:"-" yaml:"-"`
-	UngroupedGroup *Group         `json:"-" yaml:"-"`
+	Hosts          map[string]*Host  `json:"hosts" yaml:"hosts"`
+	Groups         map[string]*Group `json:"groups" yaml:"groups"`
+	fs             afero.Fs
+	AllGroup       *Group `json:"-" yaml:"-"`
+	UngroupedGroup *Group `json:"-" yaml:"-"`
 }
 
 // Manager handles inventory loading and management
@@ -328,7 +328,7 @@ func (m *Manager) parseHostEntry(line, groupName string) error {
 // parseHostRange parses host ranges like web[1:3].example.com
 func (m *Manager) parseHostRange(line, groupName string) error {
 	// Regular expression to match ranges like web[1:3].example.com
-	rangeRegex := regexp.MustCompile(`^([^[]*)\[(\d+):(\d+)\](.*)$`)
+	rangeRegex := regexp.MustCompile(`^([^[]*)\[(\d+):(\d+)](.*)$`)
 	matches := rangeRegex.FindStringSubmatch(strings.Fields(line)[0])
 
 	if len(matches) != 5 {
@@ -695,8 +695,8 @@ func (m *Manager) LoadFromDirectory(dirPath string) error {
 		fileName := file.Name()
 		// Skip backup and temporary files
 		if strings.HasSuffix(fileName, "~") ||
-		   strings.HasSuffix(fileName, ".bak") ||
-		   strings.HasPrefix(fileName, ".") {
+			strings.HasSuffix(fileName, ".bak") ||
+			strings.HasPrefix(fileName, ".") {
 			continue
 		}
 

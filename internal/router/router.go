@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ansible/ansible-go/pkg/plugins"
+	"github.com/work-obs/ansible-go/pkg/plugins"
 	"gopkg.in/yaml.v3"
 )
 

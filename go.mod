@@ -1,4 +1,4 @@
-module github.com/ansible/ansible-go
+module github.com/work-obs/ansible-go
 
 go 1.24.0
 
