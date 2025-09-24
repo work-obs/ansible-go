@@ -1,0 +1,613 @@
+openapi: 3.0.3
+info:
+  title: Ansible Go API
+  description: |
+    Complete OpenAPI specification for Ansible Go implementation.
+    This API provides programmatic access to all Ansible functionality including
+    playbook execution, module execution, inventory management, and configuration.
+  version: 2.19.0
+  contact:
+    name: Ansible Project
+    url: https://github.com/ansible/ansible-go
+  license:
+    name: GPL-3.0-or-later
+    url: https://www.gnu.org/licenses/gpl-3.0.html
+
+servers:
+  - url: https://localhost:8443/api/v1
+    description: Default local Ansible Go server
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: object
+
+    PlaybookExecution:
+      type: object
+      required:
+        - playbook_path
+      properties:
+        playbook_path:
+          type: string
+          description: Path to the playbook directory
+        inventory:
+          type: string
+          description: Inventory source (file, directory, or dynamic inventory script)
+        limit:
+          type: string
+          description: Further limit selected hosts to an additional pattern
+        tags:
+          type: array
+          items:
+            type: string
+          description: Only run plays and tasks tagged with these values
+        skip_tags:
+          type: array
+          items:
+            type: string
+          description: Only run plays and tasks whose tags do not match these values
+        extra_vars:
+          type: object
+          description: Set additional variables as key=value or YAML/JSON
+        vault_password_file:
+          type: string
+          description: Vault password file
+        check:
+          type: boolean
+          default: false
+          description: Don't make any changes; instead try to predict changes
+        diff:
+          type: boolean
+          default: false
+          description: Show changes made to files
+        verbose:
+          type: integer
+          minimum: 0
+          maximum: 4
+          default: 0
+          description: Verbose mode (0-4)
+
+    PlaybookResult:
+      type: object
+      properties:
+        execution_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [running, completed, failed, cancelled]
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        plays:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayResult'
+        stats:
+          $ref: '#/components/schemas/PlaybookStats'
+
+    PlayResult:
+      type: object
+      properties:
+        name:
+          type: string
+        hosts:
+          type: array
+          items:
+            type: string
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskResult'
+
+    TaskResult:
+      type: object
+      properties:
+        name:
+          type: string
+        action:
+          type: string
+        host:
+          type: string
+        status:
+          type: string
+          enum: [ok, changed, failed, skipped, unreachable]
+        result:
+          type: object
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+
+    PlaybookStats:
+      type: object
+      properties:
+        ok:
+          type: integer
+        changed:
+          type: integer
+        failed:
+          type: integer
+        skipped:
+          type: integer
+        unreachable:
+          type: integer
+
+    ModuleExecution:
+      type: object
+      required:
+        - module_name
+        - host_pattern
+      properties:
+        module_name:
+          type: string
+          description: Module name to execute
+        host_pattern:
+          type: string
+          description: Host pattern to target
+        module_args:
+          type: object
+          description: Module arguments
+        inventory:
+          type: string
+          description: Inventory source
+        extra_vars:
+          type: object
+          description: Additional variables
+        become:
+          type: boolean
+          default: false
+          description: Run operations with become
+        become_method:
+          type: string
+          default: sudo
+          description: Privilege escalation method
+        become_user:
+          type: string
+          default: root
+          description: Run operations as this user
+        check:
+          type: boolean
+          default: false
+          description: Don't make any changes
+        verbose:
+          type: integer
+          minimum: 0
+          maximum: 4
+          default: 0
+
+    ModuleResult:
+      type: object
+      properties:
+        execution_id:
+          type: string
+          format: uuid
+        hosts:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/HostResult'
+
+    HostResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, changed, failed, skipped, unreachable]
+        result:
+          type: object
+        stderr:
+          type: string
+        stdout:
+          type: string
+
+    Inventory:
+      type: object
+      properties:
+        all:
+          $ref: '#/components/schemas/InventoryGroup'
+
+    InventoryGroup:
+      type: object
+      properties:
+        hosts:
+          type: array
+          items:
+            type: string
+        children:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/InventoryGroup'
+        vars:
+          type: object
+
+    Configuration:
+      type: object
+      properties:
+        config:
+          type: object
+          description: Current Ansible configuration
+
+    PluginInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+        author:
+          type: array
+          items:
+            type: string
+        version:
+          type: string
+        path:
+          type: string
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Check if the Ansible Go server is healthy and ready to accept requests
+      operationId: healthCheck
+      tags:
+        - health
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+                  version:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /playbook/execute:
+    post:
+      summary: Execute a playbook
+      description: Execute an Ansible playbook with the specified parameters
+      operationId: executePlaybook
+      tags:
+        - playbook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaybookExecution'
+      responses:
+        '202':
+          description: Playbook execution started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  execution_id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /playbook/status/{execution_id}:
+    get:
+      summary: Get playbook execution status
+      description: Get the status and results of a playbook execution
+      operationId: getPlaybookStatus
+      tags:
+        - playbook
+      parameters:
+        - name: execution_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Playbook execution status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaybookResult'
+        '404':
+          description: Execution not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /module/execute:
+    post:
+      summary: Execute a module
+      description: Execute an Ansible module against specified hosts
+      operationId: executeModule
+      tags:
+        - module
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleExecution'
+      responses:
+        '200':
+          description: Module execution completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleResult'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /inventory:
+    get:
+      summary: Get inventory
+      description: Retrieve the current inventory structure
+      operationId: getInventory
+      tags:
+        - inventory
+      parameters:
+        - name: source
+          in: query
+          description: Inventory source (file, directory, or script)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Limit to specific host pattern
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Inventory data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inventory'
+
+  /inventory/hosts:
+    get:
+      summary: List hosts
+      description: List all hosts in the inventory
+      operationId: listHosts
+      tags:
+        - inventory
+      parameters:
+        - name: pattern
+          in: query
+          description: Host pattern to filter by
+          schema:
+            type: string
+        - name: source
+          in: query
+          description: Inventory source
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of hosts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hosts:
+                    type: array
+                    items:
+                      type: string
+
+  /inventory/groups:
+    get:
+      summary: List groups
+      description: List all groups in the inventory
+      operationId: listGroups
+      tags:
+        - inventory
+      parameters:
+        - name: source
+          in: query
+          description: Inventory source
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of groups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groups:
+                    type: array
+                    items:
+                      type: string
+
+  /config:
+    get:
+      summary: Get configuration
+      description: Retrieve current Ansible configuration
+      operationId: getConfiguration
+      tags:
+        - config
+      responses:
+        '200':
+          description: Current configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Configuration'
+
+  /plugins:
+    get:
+      summary: List plugins
+      description: List available plugins
+      operationId: listPlugins
+      tags:
+        - plugins
+      parameters:
+        - name: type
+          in: query
+          description: Plugin type to filter by
+          schema:
+            type: string
+            enum: [action, callback, connection, inventory, lookup, filter, test, strategy, vars, become, cache, shell, terminal]
+      responses:
+        '200':
+          description: List of plugins
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plugins:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PluginInfo'
+
+  /plugins/{plugin_type}/{plugin_name}:
+    get:
+      summary: Get plugin information
+      description: Get detailed information about a specific plugin
+      operationId: getPluginInfo
+      tags:
+        - plugins
+      parameters:
+        - name: plugin_type
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: plugin_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plugin information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PluginInfo'
+        '404':
+          description: Plugin not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /router/config:
+    get:
+      summary: Get router configuration
+      description: Get the current programmable router configuration
+      operationId: getRouterConfig
+      tags:
+        - router
+      responses:
+        '200':
+          description: Router configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  config:
+                    type: object
+
+    put:
+      summary: Update router configuration
+      description: Update the programmable router configuration
+      operationId: updateRouterConfig
+      tags:
+        - router
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                config:
+                  type: object
+      responses:
+        '200':
+          description: Router configuration updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [updated]
+        '400':
+          description: Invalid configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+tags:
+  - name: health
+    description: Health check operations
+  - name: playbook
+    description: Playbook execution operations
+  - name: module
+    description: Module execution operations
+  - name: inventory
+    description: Inventory management operations
+  - name: config
+    description: Configuration management operations
+  - name: plugins
+    description: Plugin management operations
+  - name: router
+    description: Programmable router operations
