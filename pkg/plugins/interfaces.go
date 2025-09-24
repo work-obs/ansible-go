@@ -19,12 +19,33 @@ package plugins
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
-// Add missing PluginType constants
+// PluginType represents the type of plugin
+type PluginType string
+
 const (
-	PluginTypeModule PluginType = "module"
+	PluginTypeAction       PluginType = "action"       // Module implementations
+	PluginTypeBecome       PluginType = "become"       // Privilege escalation
+	PluginTypeCache        PluginType = "cache"        // Fact/data caching
+	PluginTypeCallback     PluginType = "callback"     // Event notifications
+	PluginTypeCLIConf      PluginType = "cliconf"      // Network CLI configuration
+	PluginTypeConnection   PluginType = "connection"   // Host connections
+	PluginTypeFilter       PluginType = "filter"       // Jinja2 filters
+	PluginTypeHTTPAPI      PluginType = "httpapi"      // HTTP API interactions
+	PluginTypeInventory    PluginType = "inventory"    // Dynamic inventory
+	PluginTypeLookup       PluginType = "lookup"       // Data lookups
+	PluginTypeModule       PluginType = "module"       // Legacy module interface
+	PluginTypeNetconf      PluginType = "netconf"      // NETCONF protocol
+	PluginTypeShell        PluginType = "shell"        // Shell command formatting
+	PluginTypeStrategy     PluginType = "strategy"     // Execution strategies
+	PluginTypeTerminal     PluginType = "terminal"     // Terminal interactions
+	PluginTypeTest         PluginType = "test"         // Jinja2 tests
+	PluginTypeVars         PluginType = "vars"         // Variable sources
+	PluginTypeDocFragments PluginType = "doc_fragments" // Documentation fragments
 )
+
 
 // PluginError represents an error from plugin execution
 type PluginError struct {
@@ -43,6 +64,40 @@ type ModuleContext struct {
 	Variables map[string]interface{}
 	Facts     map[string]interface{}
 	Config    interface{}
+}
+
+// ActionContext provides context for action plugins
+type ActionContext struct {
+	ModuleContext
+	TaskVars      map[string]interface{}
+	PlayContext   *PlayContext
+	Connection    interface{} // Connection plugin instance
+	TempDir       string
+	Loader        interface{} // Data loader instance
+}
+
+// ActionResult represents the result of an action plugin execution
+type ActionResult struct {
+	Changed   bool                   `json:"changed"`
+	Failed    bool                   `json:"failed"`
+	Skipped   bool                   `json:"skipped"`
+	Message   string                 `json:"msg,omitempty"`
+	Results   map[string]interface{} `json:"-"` // Merged into top level
+	Warnings  []string               `json:"warnings,omitempty"`
+	Diff      map[string]interface{} `json:"diff,omitempty"`
+}
+
+// PlayContext provides context for play execution
+type PlayContext struct {
+	PlayName    string                 `json:"play_name"`
+	Hosts       []string               `json:"hosts"`
+	Variables   map[string]interface{} `json:"variables"`
+	Tags        []string               `json:"tags"`
+	SkipTags    []string               `json:"skip_tags"`
+	CheckMode   bool                   `json:"check_mode"`
+	DiffMode    bool                   `json:"diff_mode"`
+	Verbosity   int                    `json:"verbosity"`
+	StartTime   time.Time              `json:"start_time"`
 }
 
 // PluginInfo contains metadata about a plugin
@@ -72,8 +127,16 @@ type ModulePlugin interface {
 
 // ActionPlugin interface for action plugins
 type ActionPlugin interface {
-	ExecutablePlugin
-	ExecuteTask(ctx context.Context, task map[string]interface{}) (map[string]interface{}, error)
+	BasePlugin
+	Run(ctx context.Context, actionCtx *ActionContext) (*ActionResult, error)
+	GetRequiredConnection() string
+}
+
+// BasePlugin interface that all plugins must implement
+type BasePlugin interface {
+	Name() string
+	Type() PluginType
+	GetInfo() *PluginInfo
 }
 
 // ConnectionPlugin interface for connection plugins

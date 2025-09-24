@@ -1,0 +1,520 @@
+/*
+Copyright (c) 2024 Ansible Project
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package action
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/work-obs/ansible-go/pkg/plugins"
+)
+
+// Type alias for cleaner test code
+type ActionPlugin = plugins.ActionPlugin
+
+// TestActionPluginRegistry tests the action plugin registry
+func TestActionPluginRegistry(t *testing.T) {
+	registry := NewActionPluginRegistry()
+
+	// Test listing plugins
+	plugins := registry.List()
+	if len(plugins) == 0 {
+		t.Error("Expected some built-in plugins to be registered")
+	}
+
+	// Test getting a plugin
+	setupPlugin, err := registry.Get("setup")
+	if err != nil {
+		t.Errorf("Failed to get setup plugin: %v", err)
+	}
+
+	if setupPlugin.Name() != "setup" {
+		t.Errorf("Expected plugin name 'setup', got '%s'", setupPlugin.Name())
+	}
+
+	// Test non-existent plugin
+	_, err = registry.Get("nonexistent")
+	if err == nil {
+		t.Error("Expected error for non-existent plugin")
+	}
+
+	// Test custom registration
+	registry.Register("test", func() ActionPlugin {
+		return NewNormalActionPlugin()
+	})
+
+	if !registry.Exists("test") {
+		t.Error("Custom plugin should exist after registration")
+	}
+}
+
+// TestSetupActionPlugin tests the setup action plugin
+func TestSetupActionPlugin(t *testing.T) {
+	plugin := NewSetupActionPlugin()
+
+	if plugin.Name() != "setup" {
+		t.Errorf("Expected plugin name 'setup', got '%s'", plugin.Name())
+	}
+
+	if plugin.Type() != plugins.PluginTypeAction {
+		t.Errorf("Expected plugin type '%s', got '%s'", plugins.PluginTypeAction, plugin.Type())
+	}
+
+	// Test execution
+	ctx := context.Background()
+	actionCtx := &plugins.ActionContext{
+		ModuleContext: plugins.ModuleContext{
+			Args: map[string]interface{}{
+				"gather_subset": []string{"min"},
+			},
+		},
+	}
+
+	result, err := plugin.Run(ctx, actionCtx)
+	if err != nil {
+		t.Errorf("Setup plugin execution failed: %v", err)
+	}
+
+	if result.Failed {
+		t.Errorf("Setup plugin failed: %s", result.Message)
+	}
+
+	// Check that facts were gathered
+	if result.Results == nil {
+		t.Error("Expected results to be returned")
+	}
+
+	if facts, ok := result.Results["ansible_facts"]; !ok {
+		t.Error("Expected ansible_facts in results")
+	} else if factsMap, ok := facts.(map[string]interface{}); !ok {
+		t.Error("ansible_facts should be a map")
+	} else {
+		if factsMap["ansible_system"] == nil {
+			t.Error("Expected ansible_system fact")
+		}
+	}
+}
+
+// TestCommandActionPlugin tests the command action plugin
+func TestCommandActionPlugin(t *testing.T) {
+	plugin := NewCommandActionPlugin()
+
+	if plugin.Name() != "command" {
+		t.Errorf("Expected plugin name 'command', got '%s'", plugin.Name())
+	}
+
+	// Test validation - missing command
+	ctx := context.Background()
+	actionCtx := &plugins.ActionContext{
+		ModuleContext: plugins.ModuleContext{
+			Args: map[string]interface{}{},
+		},
+	}
+
+	result, err := plugin.Run(ctx, actionCtx)
+	if err != nil {
+		t.Errorf("Command plugin execution failed: %v", err)
+	}
+
+	if !result.Failed {
+		t.Error("Expected command plugin to fail with missing command")
+	}
+
+	// Test with command
+	actionCtx.Args = map[string]interface{}{
+		"cmd":  "echo test",
+		"warn": false,
+	}
+
+	result, err = plugin.Run(ctx, actionCtx)
+	if err != nil {
+		t.Errorf("Command plugin execution failed: %v", err)
+	}
+
+	if result.Failed {
+		t.Errorf("Command plugin failed: %s", result.Message)
+	}
+
+	if !result.Changed {
+		t.Error("Command plugin should report changed")
+	}
+}
+
+// TestShellActionPlugin tests the shell action plugin
+func TestShellActionPlugin(t *testing.T) {
+	plugin := NewShellActionPlugin()
+
+	if plugin.Name() != "shell" {
+		t.Errorf("Expected plugin name 'shell', got '%s'", plugin.Name())
+	}
+
+	// Test with shell command
+	ctx := context.Background()
+	actionCtx := &plugins.ActionContext{
+		ModuleContext: plugins.ModuleContext{
+			Args: map[string]interface{}{
+				"cmd": "echo 'hello world' | grep hello",
+			},
+		},
+	}
+
+	result, err := plugin.Run(ctx, actionCtx)
+	if err != nil {
+		t.Errorf("Shell plugin execution failed: %v", err)
+	}
+
+	if result.Failed {
+		t.Errorf("Shell plugin failed: %s", result.Message)
+	}
+}
+
+// TestCopyActionPlugin tests the copy action plugin
+func TestCopyActionPlugin(t *testing.T) {
+	plugin := NewCopyActionPlugin()
+
+	if plugin.Name() != "copy" {
+		t.Errorf("Expected plugin name 'copy', got '%s'", plugin.Name())
+	}
+
+	// Create temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "action_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test copying content
+	ctx := context.Background()
+	destPath := filepath.Join(tempDir, "test.txt")
+	actionCtx := &plugins.ActionContext{
+		ModuleContext: plugins.ModuleContext{
+			Args: map[string]interface{}{
+				"content": "Hello, World!",
+				"dest":    destPath,
+			},
+		},
+	}
+
+	result, err := plugin.Run(ctx, actionCtx)
+	if err != nil {
+		t.Errorf("Copy plugin execution failed: %v", err)
+	}
+
+	if result.Failed {
+		t.Errorf("Copy plugin failed: %s", result.Message)
+	}
+
+	if !result.Changed {
+		t.Error("Copy plugin should report changed")
+	}
+
+	// Verify file was created
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		t.Error("File was not created")
+	}
+
+	// Verify content
+	content, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Errorf("Failed to read created file: %v", err)
+	}
+
+	if string(content) != "Hello, World!" {
+		t.Errorf("File content mismatch. Expected 'Hello, World!', got '%s'", string(content))
+	}
+}
+
+// TestFileActionPlugin tests the file action plugin
+func TestFileActionPlugin(t *testing.T) {
+	plugin := NewFileActionPlugin()
+
+	if plugin.Name() != "file" {
+		t.Errorf("Expected plugin name 'file', got '%s'", plugin.Name())
+	}
+
+	// Create temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "action_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test touch operation
+	ctx := context.Background()
+	testPath := filepath.Join(tempDir, "touch_test.txt")
+	actionCtx := &plugins.ActionContext{
+		ModuleContext: plugins.ModuleContext{
+			Args: map[string]interface{}{
+				"path":  testPath,
+				"state": "touch",
+			},
+		},
+	}
+
+	result, err := plugin.Run(ctx, actionCtx)
+	if err != nil {
+		t.Errorf("File plugin execution failed: %v", err)
+	}
+
+	if result.Failed {
+		t.Errorf("File plugin failed: %s", result.Message)
+	}
+
+	if !result.Changed {
+		t.Error("File plugin should report changed for new file")
+	}
+
+	// Verify file was created
+	if _, err := os.Stat(testPath); os.IsNotExist(err) {
+		t.Error("File was not created by touch")
+	}
+
+	// Test directory creation
+	dirPath := filepath.Join(tempDir, "test_dir")
+	actionCtx.Args = map[string]interface{}{
+		"path":  dirPath,
+		"state": "directory",
+	}
+
+	result, err = plugin.Run(ctx, actionCtx)
+	if err != nil {
+		t.Errorf("File plugin execution failed: %v", err)
+	}
+
+	if result.Failed {
+		t.Errorf("File plugin failed: %s", result.Message)
+	}
+
+	// Verify directory was created
+	if stat, err := os.Stat(dirPath); os.IsNotExist(err) {
+		t.Error("Directory was not created")
+	} else if !stat.IsDir() {
+		t.Error("Created path is not a directory")
+	}
+}
+
+// TestServiceActionPlugin tests the service action plugin
+func TestServiceActionPlugin(t *testing.T) {
+	plugin := NewServiceActionPlugin()
+
+	if plugin.Name() != "service" {
+		t.Errorf("Expected plugin name 'service', got '%s'", plugin.Name())
+	}
+
+	// Test validation - missing name
+	ctx := context.Background()
+	actionCtx := &plugins.ActionContext{
+		ModuleContext: plugins.ModuleContext{
+			Args: map[string]interface{}{},
+		},
+	}
+
+	result, err := plugin.Run(ctx, actionCtx)
+	if err != nil {
+		t.Errorf("Service plugin execution failed: %v", err)
+	}
+
+	if !result.Failed {
+		t.Error("Expected service plugin to fail with missing name")
+	}
+
+	// Test with valid service name (in check mode to avoid actual service operations)
+	actionCtx.Args = map[string]interface{}{
+		"name":  "test-service",
+		"state": "started",
+	}
+	actionCtx.PlayContext = &plugins.PlayContext{
+		CheckMode: true,
+	}
+
+	result, err = plugin.Run(ctx, actionCtx)
+	if err != nil {
+		t.Errorf("Service plugin execution failed: %v", err)
+	}
+
+	if result.Failed {
+		t.Errorf("Service plugin failed: %s", result.Message)
+	}
+
+	if !result.Changed {
+		t.Error("Service plugin should report changed in check mode")
+	}
+}
+
+// TestNormalActionPlugin tests the normal action plugin
+func TestNormalActionPlugin(t *testing.T) {
+	plugin := NewNormalActionPlugin()
+
+	if plugin.Name() != "normal" {
+		t.Errorf("Expected plugin name 'normal', got '%s'", plugin.Name())
+	}
+
+	// Test execution
+	ctx := context.Background()
+	actionCtx := &plugins.ActionContext{
+		ModuleContext: plugins.ModuleContext{
+			Args: map[string]interface{}{
+				"test_arg": "test_value",
+			},
+		},
+		TaskVars: map[string]interface{}{
+			"test_var": "var_value",
+		},
+	}
+
+	result, err := plugin.Run(ctx, actionCtx)
+	if err != nil {
+		t.Errorf("Normal plugin execution failed: %v", err)
+	}
+
+	if result.Failed {
+		t.Errorf("Normal plugin failed: %s", result.Message)
+	}
+
+	// Check that task vars are included
+	if result.Results["task_vars"] == nil {
+		t.Error("Expected task_vars in results")
+	}
+
+	if result.Results["module_args"] == nil {
+		t.Error("Expected module_args in results")
+	}
+}
+
+// TestCheckModeHandling tests check mode handling across plugins
+func TestCheckModeHandling(t *testing.T) {
+	plugins := []struct {
+		name   string
+		plugin ActionPlugin
+		args   map[string]interface{}
+	}{
+		{
+			"command",
+			NewCommandActionPlugin(),
+			map[string]interface{}{"cmd": "echo test", "warn": false},
+		},
+		{
+			"copy",
+			NewCopyActionPlugin(),
+			map[string]interface{}{"content": "test", "dest": "/tmp/test"},
+		},
+		{
+			"file",
+			NewFileActionPlugin(),
+			map[string]interface{}{"path": "/tmp/test", "state": "touch"},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, p := range plugins {
+		t.Run(p.name, func(t *testing.T) {
+			actionCtx := &plugins.ActionContext{
+				ModuleContext: plugins.ModuleContext{
+					Args: p.args,
+				},
+				PlayContext: &plugins.PlayContext{
+					CheckMode: true,
+				},
+			}
+
+			result, err := p.plugin.Run(ctx, actionCtx)
+			if err != nil {
+				t.Errorf("%s plugin execution failed: %v", p.name, err)
+			}
+
+			if result.Failed {
+				t.Errorf("%s plugin failed in check mode: %s", p.name, result.Message)
+			}
+
+			// Most plugins should report changed in check mode
+			if p.name != "setup" && !result.Changed {
+				t.Errorf("%s plugin should report changed in check mode", p.name)
+			}
+		})
+	}
+}
+
+// TestHelperFunctions tests the helper functions
+func TestHelperFunctions(t *testing.T) {
+	args := map[string]interface{}{
+		"string_arg":  "test_value",
+		"bool_arg":    true,
+		"int_arg":     42,
+		"slice_arg":   []string{"a", "b", "c"},
+		"map_arg":     map[string]interface{}{"key": "value"},
+		"bool_string": "yes",
+	}
+
+	// Test GetArgString
+	if GetArgString(args, "string_arg", "default") != "test_value" {
+		t.Error("GetArgString failed for existing string")
+	}
+	if GetArgString(args, "missing_arg", "default") != "default" {
+		t.Error("GetArgString failed for missing arg")
+	}
+
+	// Test GetArgBool
+	if !GetArgBool(args, "bool_arg", false) {
+		t.Error("GetArgBool failed for existing bool")
+	}
+	if !GetArgBool(args, "bool_string", false) {
+		t.Error("GetArgBool failed for bool string")
+	}
+
+	// Test GetArgInt
+	if GetArgInt(args, "int_arg", 0) != 42 {
+		t.Error("GetArgInt failed for existing int")
+	}
+
+	// Test GetArgStringSlice
+	slice := GetArgStringSlice(args, "slice_arg")
+	if len(slice) != 3 || slice[0] != "a" {
+		t.Error("GetArgStringSlice failed")
+	}
+
+	// Test GetArgMap
+	m := GetArgMap(args, "map_arg")
+	if m["key"] != "value" {
+		t.Error("GetArgMap failed")
+	}
+
+	// Test validation functions
+	required := []string{"string_arg", "bool_arg"}
+	if err := ValidateRequired(args, required); err != nil {
+		t.Errorf("ValidateRequired failed: %v", err)
+	}
+
+	missing := []string{"missing_arg"}
+	if err := ValidateRequired(args, missing); err == nil {
+		t.Error("ValidateRequired should fail for missing args")
+	}
+
+	// Test ValidateChoices
+	args["choice_arg"] = "option1"
+	choices := []string{"option1", "option2"}
+	if err := ValidateChoices(args, "choice_arg", choices); err != nil {
+		t.Errorf("ValidateChoices failed: %v", err)
+	}
+
+	args["choice_arg"] = "invalid"
+	if err := ValidateChoices(args, "choice_arg", choices); err == nil {
+		t.Error("ValidateChoices should fail for invalid choice")
+	}
+}

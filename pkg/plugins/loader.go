@@ -28,24 +28,6 @@ import (
 	"github.com/spf13/afero"
 )
 
-// PluginType represents the type of plugin
-type PluginType string
-
-const (
-	PluginTypeAction     PluginType = "action"
-	PluginTypeCallback   PluginType = "callback"
-	PluginTypeConnection PluginType = "connection"
-	PluginTypeInventory  PluginType = "inventory"
-	PluginTypeLookup     PluginType = "lookup"
-	PluginTypeFilter     PluginType = "filter"
-	PluginTypeTest       PluginType = "test"
-	PluginTypeStrategy   PluginType = "strategy"
-	PluginTypeVars       PluginType = "vars"
-	PluginTypeBecome     PluginType = "become"
-	PluginTypeCache      PluginType = "cache"
-	PluginTypeShell      PluginType = "shell"
-	PluginTypeTerminal   PluginType = "terminal"
-)
 
 // Plugin represents a loaded plugin
 type Plugin struct {
